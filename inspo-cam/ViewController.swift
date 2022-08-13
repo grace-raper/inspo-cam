@@ -27,6 +27,8 @@ class ViewController: UIViewController {
     
     private let videoDeviceDiscoverySession = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .builtInDualCamera, .builtInTrueDepthCamera], mediaType: .video, position: .unspecified)
     
+    var InspoCgImage =  UIImage(named: "test-image")?.cgImage
+    
     private let inspoLayer: CALayer = {
         let inspo = CALayer()
         inspo.contents = UIImage(named: "test-image")?.cgImage
@@ -35,6 +37,49 @@ class ViewController: UIViewController {
         return inspo
     }()
     
+    func correctImageOrientation(cgImage: CGImage?, orienation: UIImage.Orientation) -> CGImage? {
+        guard let cgImage = cgImage else { return nil }
+        var orientedImage: CGImage?
+
+        let originalWidth = cgImage.width
+        let originalHeight = cgImage.height
+        let bitsPerComponent = cgImage.bitsPerComponent
+        let bytesPerRow = cgImage.bytesPerRow
+        let bitmapInfo = cgImage.bitmapInfo
+
+        guard let colorSpace = cgImage.colorSpace else { return nil }
+
+        let degreesToRotate = orienation.getDegree()
+        let mirrored = orienation.isMirror()
+
+        var width = originalWidth
+        var height = originalHeight
+
+        let radians = degreesToRotate * Double.pi / 180.0
+        let swapWidthHeight = Int(degreesToRotate / 90) % 2 != 0
+
+        if swapWidthHeight {
+            swap(&width, &height)
+        }
+
+        let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: bitsPerComponent, bytesPerRow: bytesPerRow, space: colorSpace, bitmapInfo: bitmapInfo.rawValue)
+
+        context?.translateBy(x: CGFloat(width) / 2.0, y: CGFloat(height) / 2.0)
+        if mirrored {
+            context?.scaleBy(x: -1.0, y: 1.0)
+        }
+        context?.rotate(by: CGFloat(radians))
+        if swapWidthHeight {
+            swap(&width, &height)
+        }
+        context?.translateBy(x: -CGFloat(width) / 2.0, y: -CGFloat(height) / 2.0)
+
+        context?.draw(cgImage, in: CGRect(x: 0.0, y: 0.0, width: CGFloat(originalWidth), height: CGFloat(originalHeight)))
+        orientedImage = context?.makeImage()
+
+        return orientedImage
+    }
+
     // Opacity Slider
     private let opacitySlider: UISlider = {
         let slider = UISlider(frame:CGRect(x: 0, y: 0, width: 300, height: 20))
@@ -206,7 +251,8 @@ class ViewController: UIViewController {
     }
     
     @objc func mirrorInspoImage() {
-        print("heyhey")
+        InspoCgImage = correctImageOrientation(cgImage: InspoCgImage, orienation: UIImage.Orientation.upMirrored)
+        inspoLayer.contents = InspoCgImage
     }
     
     
@@ -306,12 +352,41 @@ extension ViewController: PHPickerViewControllerDelegate {
            result.itemProvider.loadObject(ofClass: UIImage.self, completionHandler: { (object, error) in
               if let image = object as? UIImage {
                  DispatchQueue.main.async {
-                     self.inspoLayer.contents = image.cgImage
+                     self.InspoCgImage = image.cgImage
+                     self.inspoLayer.contents = self.InspoCgImage
                      self.inspoLayer.contentsGravity = CALayerContentsGravity.resizeAspect;
                     //print("Selected image: \(image)")
                  }
               }
            })
+        }
+    }
+}
+
+extension UIImage.Orientation {
+    func getDegree() -> Double {
+        switch self {
+        case .up, .upMirrored:
+            return 0.0
+        case .right, .rightMirrored:
+            return 90.0
+        case .down, .downMirrored:
+            return 180.0
+        case .left, .leftMirrored:
+            return -90.0
+        default:
+            return 0
+        }
+    }
+
+    func isMirror() -> Bool {
+        switch self {
+        case .up, .right, .down, .left:
+            return false
+        case .leftMirrored, .upMirrored, .downMirrored, .rightMirrored:
+            return true
+        default:
+            return false
         }
     }
 }
