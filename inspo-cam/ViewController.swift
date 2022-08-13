@@ -6,7 +6,10 @@
 //
 
 import AVFoundation
+import Foundation
+import Combine
 import UIKit
+import Photos
 import PhotosUI
 import CoreLocation
 
@@ -15,10 +18,14 @@ class ViewController: UIViewController {
     
     // Photo Output
     let output = AVCapturePhotoOutput()
+    let photoOutput = AVCapturePhotoOutput()
     
     // Video Preview
     @objc dynamic var videoDeviceInput: AVCaptureDeviceInput!
     let previewLayer = AVCaptureVideoPreviewLayer()
+    let videoOrientation = AVCaptureVideoOrientation.portrait
+    
+    private let videoDeviceDiscoverySession = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .builtInDualCamera, .builtInTrueDepthCamera], mediaType: .video, position: .unspecified)
     
     // inspiration picture
     private let inspoLayer: CALayer = {
@@ -48,12 +55,25 @@ class ViewController: UIViewController {
         return button
     }()
     
-    // Shutter Button
+    // pick inspo button
     private let pickInspoPhotoButton: UIButton = {
-        let button = UIButton(frame: CGRect(x: 0, y:0, width: 80, height: 80))
-        button.layer.cornerRadius = 5
-        button.layer.borderWidth = 10
+        let button = UIButton(frame: CGRect(x: 0, y:0, width: 60, height: 60))
+        button.layer.cornerRadius = 15
+        button.layer.borderWidth = 4
         button.layer.borderColor = UIColor.white.cgColor
+        let buttonIcon = UIImage(systemName: "tray.and.arrow.up")
+        button.setImage(buttonIcon, for: .normal)
+        return button
+    }()
+    
+    // flip camera button
+    private let flipCameraButton: UIButton = {
+        let button = UIButton(frame: CGRect(x: 0, y:0, width: 60, height: 60))
+        button.layer.cornerRadius = 15
+        button.layer.borderWidth = 4
+        button.layer.borderColor = UIColor.white.cgColor
+        let buttonIcon = UIImage(systemName: "camera.rotate.fill")
+        button.setImage(buttonIcon, for: .normal)
         return button
     }()
     
@@ -66,8 +86,10 @@ class ViewController: UIViewController {
         checkCameraPermissions()
         view.layer.addSublayer(previewLayer)
         view.layer.addSublayer(inspoLayer)
+        view.addSubview(flipCameraButton)
         shutterButton.addTarget(self, action: #selector(didTapTakePhoto), for: .touchUpInside)
         pickInspoPhotoButton.addTarget(self, action: #selector(pickPhotos), for: .touchUpInside)
+        flipCameraButton.addTarget(self, action: #selector(changeCamera), for: .touchUpInside)
         opacitySlider.addTarget(self, action: #selector(self.sliderValueDidChange(_:)), for: .valueChanged)
     }
     
@@ -76,7 +98,8 @@ class ViewController: UIViewController {
         previewLayer.frame = CGRect(origin: CGPoint(), size: CGSize(width: view.frame.size.width, height: view.frame.size.height-80)) // works but idk how
         inspoLayer.frame = previewLayer.frame
         shutterButton.center = CGPoint(x: view.frame.size.width/2, y: view.frame.size.height - 80)
-        pickInspoPhotoButton.center = CGPoint(x: view.frame.size.width/2 - 100, y: view.frame.size.height - 80)
+        pickInspoPhotoButton.center = CGPoint(x: view.frame.size.width/2 - 130, y: view.frame.size.height - 80)
+        flipCameraButton.center = CGPoint(x: view.frame.size.width/2 + 130, y: view.frame.size.height - 80)
         opacitySlider.center = CGPoint(x: view.frame.size.width/2, y: view.frame.size.height - 145)
     }
     
@@ -123,8 +146,7 @@ class ViewController: UIViewController {
                 print("video device input")
                 session.addInput(videoDeviceInput)
                 self.videoDeviceInput = videoDeviceInput
-                let initialVideoOrientation = AVCaptureVideoOrientation.portrait
-                self.previewLayer.connection?.videoOrientation = initialVideoOrientation
+                self.previewLayer.connection?.videoOrientation = videoOrientation
             } else {
                 print("Couldn't add video device input to the session.")
                 return
@@ -148,7 +170,7 @@ class ViewController: UIViewController {
         previewLayer.session = session
     }
 
-    @objc func sliderValueDidChange(_ sender:UISlider!){
+    @objc private func sliderValueDidChange(_ sender:UISlider!){
         print("Slider value changed")
         inspoLayer.opacity = sender.value
     }
@@ -167,6 +189,66 @@ class ViewController: UIViewController {
         pickerViewController.delegate = self
         self.present(pickerViewController, animated: true, completion: nil)
     }
+    
+    
+    @objc private func changeCamera() {
+        sessionQueue.async {
+            let currentVideoDevice = self.videoDeviceInput.device
+            let currentPosition = currentVideoDevice.position
+            let preferredPosition: AVCaptureDevice.Position
+            let preferredDeviceType: AVCaptureDevice.DeviceType
+            
+            switch currentPosition {
+            case .unspecified, .front:
+                preferredPosition = .back
+                preferredDeviceType = .builtInWideAngleCamera
+                
+            case .back:
+                preferredPosition = .front
+                preferredDeviceType = .builtInWideAngleCamera
+                
+            @unknown default:
+                print("Unknown capture position. Defaulting to back, dual-camera.")
+                preferredPosition = .back
+                preferredDeviceType = .builtInWideAngleCamera
+            }
+            
+            let devices = self.videoDeviceDiscoverySession.devices
+            var newVideoDevice: AVCaptureDevice? = nil
+            
+            // First, seek a device with both the preferred position and device type. Otherwise, seek a device with only the preferred position.
+            if let device = devices.first(where: { $0.position == preferredPosition && $0.deviceType == preferredDeviceType }) {
+                newVideoDevice = device
+            } else if let device = devices.first(where: { $0.position == preferredPosition }) {
+                newVideoDevice = device
+            }
+            
+            if let videoDevice = newVideoDevice {
+                do {
+                    let videoDeviceInput = try AVCaptureDeviceInput(device: videoDevice)
+                    self.previewLayer.session!.beginConfiguration()
+                    
+                    self.previewLayer.session!.removeInput(self.videoDeviceInput) // remove existing device
+                    if self.previewLayer.session!.canAddInput(videoDeviceInput) {
+                        self.previewLayer.session!.addInput(videoDeviceInput)
+                        self.videoDeviceInput = videoDeviceInput
+                    } else {
+                        self.previewLayer.session!.addInput(self.videoDeviceInput)
+                    }
+                    
+                    if let connection = self.photoOutput.connection(with: .video) {
+                        if connection.isVideoStabilizationSupported {
+                            connection.preferredVideoStabilizationMode = .auto
+                        }
+                    }
+                    self.photoOutput.maxPhotoQualityPrioritization = .quality
+                    self.previewLayer.session!.commitConfiguration()
+                } catch {
+                    print("Error occurred while creating video device input: \(error)")
+                }
+            }
+        }
+    }
 }
 
 extension ViewController: AVCapturePhotoCaptureDelegate {
@@ -174,11 +256,23 @@ extension ViewController: AVCapturePhotoCaptureDelegate {
         guard let data = photo.fileDataRepresentation() else {
             return
         }
-        previewLayer.session?.stopRunning()
-        let image = UIImage(data: data)
-        let imageView = UIImageView(image: image)
-        imageView.contentMode = .scaleAspectFit
-        view.addSubview(imageView)
+        self.saveToPhotoLibrary(data)
+    }
+    
+    func saveToPhotoLibrary(_ photoData: Data) {
+        PHPhotoLibrary.requestAuthorization { status in
+            if status == .authorized {
+                PHPhotoLibrary.shared().performChanges({
+                    let options = PHAssetResourceCreationOptions()
+                    let creationRequest = PHAssetCreationRequest.forAsset()
+                    creationRequest.addResource(with: .photo, data: photoData, options: options)
+                }, completionHandler: { _, error in
+                    if let error = error {
+                        print("Error occurred while saving photo to photo library: \(error)")
+                    }
+                })
+            }
+        }
     }
 }
 
