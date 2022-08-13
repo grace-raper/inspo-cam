@@ -27,7 +27,6 @@ class ViewController: UIViewController {
     
     private let videoDeviceDiscoverySession = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .builtInDualCamera, .builtInTrueDepthCamera], mediaType: .video, position: .unspecified)
     
-    // inspiration picture
     private let inspoLayer: CALayer = {
         let inspo = CALayer()
         inspo.contents = UIImage(named: "test-image")?.cgImage
@@ -63,6 +62,7 @@ class ViewController: UIViewController {
         button.layer.borderColor = UIColor.white.cgColor
         let buttonIcon = UIImage(systemName: "tray.and.arrow.up")
         button.setImage(buttonIcon, for: .normal)
+        button.tintColor = UIColor.white
         return button
     }()
     
@@ -74,6 +74,18 @@ class ViewController: UIViewController {
         button.layer.borderColor = UIColor.white.cgColor
         let buttonIcon = UIImage(systemName: "camera.rotate.fill")
         button.setImage(buttonIcon, for: .normal)
+        button.tintColor = UIColor.white
+        return button
+    }()
+    
+    private let mirrorImageButton: UIButton = {
+        let button = UIButton(frame: CGRect(x: 0, y: 0, width: 36, height: 36))
+        button.layer.cornerRadius = 9
+        button.layer.borderWidth = 2
+        button.layer.borderColor = UIColor.white.cgColor
+        let buttonIcon = UIImage(systemName: "arrow.left.and.right.righttriangle.left.righttriangle.right")
+        button.setImage(buttonIcon, for: .normal)
+        button.tintColor = UIColor.white
         return button
     }()
     
@@ -87,10 +99,12 @@ class ViewController: UIViewController {
         view.layer.addSublayer(previewLayer)
         view.layer.addSublayer(inspoLayer)
         view.addSubview(flipCameraButton)
+        view.addSubview(mirrorImageButton)
         shutterButton.addTarget(self, action: #selector(didTapTakePhoto), for: .touchUpInside)
         pickInspoPhotoButton.addTarget(self, action: #selector(pickPhotos), for: .touchUpInside)
         flipCameraButton.addTarget(self, action: #selector(changeCamera), for: .touchUpInside)
         opacitySlider.addTarget(self, action: #selector(self.sliderValueDidChange(_:)), for: .valueChanged)
+        mirrorImageButton.addTarget(self, action: #selector(mirrorInspoImage), for: .touchUpInside)
     }
     
     override func viewDidLayoutSubviews() {
@@ -101,6 +115,7 @@ class ViewController: UIViewController {
         pickInspoPhotoButton.center = CGPoint(x: view.frame.size.width/2 - 130, y: view.frame.size.height - 80)
         flipCameraButton.center = CGPoint(x: view.frame.size.width/2 + 130, y: view.frame.size.height - 80)
         opacitySlider.center = CGPoint(x: view.frame.size.width/2, y: view.frame.size.height - 145)
+        mirrorImageButton.center = CGPoint(x: view.frame.size.width/2 + 175, y: view.frame.size.height - 250)
     }
     
     private func checkCameraPermissions() {
@@ -188,6 +203,10 @@ class ViewController: UIViewController {
         let pickerViewController = PHPickerViewController(configuration: config)
         pickerViewController.delegate = self
         self.present(pickerViewController, animated: true, completion: nil)
+    }
+    
+    @objc func mirrorInspoImage() {
+        print("heyhey")
     }
     
     
