@@ -27,7 +27,7 @@ class ViewController: UIViewController {
     
     private let videoDeviceDiscoverySession = AVCaptureDevice.DiscoverySession(deviceTypes: [.builtInWideAngleCamera, .builtInDualCamera, .builtInTrueDepthCamera], mediaType: .video, position: .unspecified)
     
-    var InspoCgImage =  UIImage(named: "test-image")?.cgImage
+    var InspoCgImage = UIImage(named: "test-image")?.cgImage
     
     private let inspoLayer: CALayer = {
         let inspo = CALayer()
@@ -36,49 +36,6 @@ class ViewController: UIViewController {
         inspo.contentsGravity = CALayerContentsGravity.resizeAspect;
         return inspo
     }()
-    
-    func correctImageOrientation(cgImage: CGImage?, orienation: UIImage.Orientation) -> CGImage? {
-        guard let cgImage = cgImage else { return nil }
-        var orientedImage: CGImage?
-
-        let originalWidth = cgImage.width
-        let originalHeight = cgImage.height
-        let bitsPerComponent = cgImage.bitsPerComponent
-        let bytesPerRow = cgImage.bytesPerRow
-        let bitmapInfo = cgImage.bitmapInfo
-
-        guard let colorSpace = cgImage.colorSpace else { return nil }
-
-        let degreesToRotate = orienation.getDegree()
-        let mirrored = orienation.isMirror()
-
-        var width = originalWidth
-        var height = originalHeight
-
-        let radians = degreesToRotate * Double.pi / 180.0
-        let swapWidthHeight = Int(degreesToRotate / 90) % 2 != 0
-
-        if swapWidthHeight {
-            swap(&width, &height)
-        }
-
-        let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: bitsPerComponent, bytesPerRow: bytesPerRow, space: colorSpace, bitmapInfo: bitmapInfo.rawValue)
-
-        context?.translateBy(x: CGFloat(width) / 2.0, y: CGFloat(height) / 2.0)
-        if mirrored {
-            context?.scaleBy(x: -1.0, y: 1.0)
-        }
-        context?.rotate(by: CGFloat(radians))
-        if swapWidthHeight {
-            swap(&width, &height)
-        }
-        context?.translateBy(x: -CGFloat(width) / 2.0, y: -CGFloat(height) / 2.0)
-
-        context?.draw(cgImage, in: CGRect(x: 0.0, y: 0.0, width: CGFloat(originalWidth), height: CGFloat(originalHeight)))
-        orientedImage = context?.makeImage()
-
-        return orientedImage
-    }
 
     // Opacity Slider
     private let opacitySlider: UISlider = {
@@ -134,6 +91,17 @@ class ViewController: UIViewController {
         return button
     }()
     
+    private let rotateImageButton: UIButton = {
+        let button = UIButton(frame: CGRect(x: 0, y: 0, width: 36, height: 36))
+        button.layer.cornerRadius = 9
+        button.layer.borderWidth = 2
+        button.layer.borderColor = UIColor.white.cgColor
+        let buttonIcon = UIImage(systemName: "rotate.right")
+        button.setImage(buttonIcon, for: .normal)
+        button.tintColor = UIColor.white
+        return button
+    }()
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
@@ -145,11 +113,13 @@ class ViewController: UIViewController {
         view.layer.addSublayer(inspoLayer)
         view.addSubview(flipCameraButton)
         view.addSubview(mirrorImageButton)
+        view.addSubview(rotateImageButton)
         shutterButton.addTarget(self, action: #selector(didTapTakePhoto), for: .touchUpInside)
         pickInspoPhotoButton.addTarget(self, action: #selector(pickPhotos), for: .touchUpInside)
         flipCameraButton.addTarget(self, action: #selector(changeCamera), for: .touchUpInside)
         opacitySlider.addTarget(self, action: #selector(self.sliderValueDidChange(_:)), for: .valueChanged)
         mirrorImageButton.addTarget(self, action: #selector(mirrorInspoImage), for: .touchUpInside)
+        rotateImageButton.addTarget(self, action: #selector(rotateInspoImage), for: .touchUpInside)
     }
     
     override func viewDidLayoutSubviews() {
@@ -160,7 +130,8 @@ class ViewController: UIViewController {
         pickInspoPhotoButton.center = CGPoint(x: view.frame.size.width/2 - 130, y: view.frame.size.height - 80)
         flipCameraButton.center = CGPoint(x: view.frame.size.width/2 + 130, y: view.frame.size.height - 80)
         opacitySlider.center = CGPoint(x: view.frame.size.width/2, y: view.frame.size.height - 145)
-        mirrorImageButton.center = CGPoint(x: view.frame.size.width/2 + 175, y: view.frame.size.height - 250)
+        mirrorImageButton.center = CGPoint(x: view.frame.size.width/2 + 175, y: view.frame.size.height - 245)
+        rotateImageButton.center = CGPoint(x: view.frame.size.width/2 + 175, y: view.frame.size.height - 290)
     }
     
     private func checkCameraPermissions() {
@@ -250,9 +221,58 @@ class ViewController: UIViewController {
         self.present(pickerViewController, animated: true, completion: nil)
     }
     
+    func correctImageOrientation(cgImage: CGImage?, orienation: UIImage.Orientation) -> CGImage? {
+        guard let cgImage = cgImage else { return nil }
+        var orientedImage: CGImage?
+
+        let originalWidth = cgImage.width
+        let originalHeight = cgImage.height
+        let bitsPerComponent = cgImage.bitsPerComponent
+        let bytesPerRow = cgImage.bytesPerRow
+        let bitmapInfo = cgImage.bitmapInfo
+
+        guard let colorSpace = cgImage.colorSpace else { return nil }
+
+        let degreesToRotate = orienation.getDegree()
+        let mirrored = orienation.isMirror()
+
+        var width = originalWidth
+        var height = originalHeight
+
+        let radians = degreesToRotate * Double.pi / 180.0
+        let swapWidthHeight = Int(degreesToRotate / 90) % 2 != 0
+
+        if swapWidthHeight {
+            swap(&width, &height)
+        }
+
+        let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: bitsPerComponent, bytesPerRow: bytesPerRow, space: colorSpace, bitmapInfo: bitmapInfo.rawValue)
+
+        context?.translateBy(x: CGFloat(width) / 2.0, y: CGFloat(height) / 2.0)
+        if mirrored {
+            context?.scaleBy(x: -1.0, y: 1.0)
+        }
+        context?.rotate(by: CGFloat(radians))
+        if swapWidthHeight {
+            swap(&width, &height)
+        }
+        context?.translateBy(x: -CGFloat(width) / 2.0, y: -CGFloat(height) / 2.0)
+
+        context?.draw(cgImage, in: CGRect(x: 0.0, y: 0.0, width: CGFloat(originalWidth), height: CGFloat(originalHeight)))
+        orientedImage = context?.makeImage()
+
+        return orientedImage
+    }
+    
     @objc func mirrorInspoImage() {
         InspoCgImage = correctImageOrientation(cgImage: InspoCgImage, orienation: UIImage.Orientation.upMirrored)
         inspoLayer.contents = InspoCgImage
+    }
+    
+    @objc func rotateInspoImage() {
+        InspoCgImage = correctImageOrientation(cgImage: InspoCgImage, orienation: UIImage.Orientation.left)
+        inspoLayer.contents = InspoCgImage
+        self.inspoLayer.contentsGravity = CALayerContentsGravity.resizeAspect;
     }
     
     
@@ -355,7 +375,6 @@ extension ViewController: PHPickerViewControllerDelegate {
                      self.InspoCgImage = image.cgImage
                      self.inspoLayer.contents = self.InspoCgImage
                      self.inspoLayer.contentsGravity = CALayerContentsGravity.resizeAspect;
-                    //print("Selected image: \(image)")
                  }
               }
            })
